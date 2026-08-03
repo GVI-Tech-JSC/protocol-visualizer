@@ -1,0 +1,43 @@
+# Dependency stage
+# Pinned image: node:24-slim (Node v24.14.1, Debian/glibc)
+FROM node:24-slim@sha256:242549cd46785b480c832479a730f4f2a20865d61ea2e404fdb2a5c3d3b73ecf AS deps
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@11.13.0 --activate
+
+# Set working directory
+WORKDIR /app
+
+# Copy pnpm files and root package.json (for overrides)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/indexer/package.json ./apps/indexer/
+
+# Install production dependencies
+RUN pnpm install --frozen-lockfile --prod
+
+# Copy source code
+COPY apps/indexer/ ./apps/indexer/
+
+# Runtime stage
+# Pinned image index: gcr.io/distroless/nodejs24-debian13
+FROM gcr.io/distroless/nodejs24-debian13@sha256:10e262383ceb3a2a5f6f5ceaca5ecebe74951eff21868a055589676eec3a8001 AS runtime
+
+# Set working directory
+WORKDIR /app
+
+# Copy runtime dependencies and source from dependency stage
+COPY --from=deps --chown=nonroot:nonroot /app/node_modules ./node_modules
+COPY --from=deps --chown=nonroot:nonroot /app/apps/indexer ./apps/indexer
+COPY --from=deps --chown=nonroot:nonroot /app/package.json ./package.json
+COPY --from=deps --chown=nonroot:nonroot /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+# Set environment variables
+ENV NODE_ENV=production
+
+# Expose the Envio indexer metrics/API port.
+EXPOSE 9898
+
+# Start the application
+WORKDIR /app/apps/indexer
+USER nonroot
+CMD ["scripts/start-envio.mjs"]

@@ -1,0 +1,54 @@
+# Build stage
+FROM node:24-alpine@sha256:01743339035a5c3c11a373cd7c83aeab6ed1457b55da6a69e014a95ac4e4700b AS builder
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@11.13.0 --activate
+
+# Set working directory
+WORKDIR /app
+
+# Copy pnpm files and root package.json (for overrides)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/frontend/package.json ./apps/frontend/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY apps/frontend/ ./apps/frontend/
+COPY packages/protocol-config/ ./packages/protocol-config/
+
+WORKDIR /app/apps/frontend
+
+# Environment variables
+ARG VITE_PROTOCOL_SNAPSHOT_BASE_URL
+ENV VITE_PROTOCOL_SNAPSHOT_BASE_URL=$VITE_PROTOCOL_SNAPSHOT_BASE_URL
+
+# Build the application
+RUN pnpm run build
+
+# Production stage
+FROM nginxinc/nginx-unprivileged:alpine@sha256:601c823234c474696ded03d619e67f1e59538802731543099c691aea67e4a553
+
+# Apply Alpine security updates
+USER root
+RUN apk upgrade --no-cache c-ares curl libcurl libexpat musl musl-utils zlib libssl3 libcrypto3 libuuid libpng libxpm libxml2 nghttp2-libs xz-libs
+
+# Copy the built static files to Nginx's serve directory
+COPY --from=builder /app/apps/frontend/dist /usr/share/nginx/html
+
+# Remove scaffold/default assets that are not referenced by the app.
+RUN rm -f \
+    /usr/share/nginx/html/50x.html \
+    /usr/share/nginx/html/file.svg \
+    /usr/share/nginx/html/globe.svg \
+    /usr/share/nginx/html/next.svg \
+    /usr/share/nginx/html/vercel.svg \
+    /usr/share/nginx/html/window.svg
+
+# Copy Nginx config
+COPY --from=builder /app/apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 8080
+
+USER 101

@@ -1,0 +1,26 @@
+{
+  "name": "indexer",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --test scripts/*.test.mjs",
+    "dev": "envio dev",
+    "start": "envio start",
+    "codegen": "envio codegen",
+    "lint": "biome lint --write . --error-on-warnings",
+    "lint:check": "biome lint . --error-on-warnings",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "envio": "3.0.0",
+    "viem": "^2.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.2.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
